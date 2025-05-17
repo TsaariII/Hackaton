@@ -18,7 +18,7 @@ from selenium.webdriver.chrome.options import Options
 # 🔧 Configuration
 # ──────────────────────────────────────────────────────────────
 
-MODEL_PATH = os.path.expanduser("/Applications/gpt4all/models/Meta-Llama-3.1-8B-Instruct-128k-Q4_0.gguf")
+MODEL_PATH = os.path.expanduser("/home/fdessoy/.local/share/nomic.ai/GPT4All/Meta-Llama-3-8B-Instruct.Q4_0.gguf")
 TESSERACT_PATH = "/opt/homebrew/bin/tesseract"
 GAME_NAME = "Witcher 3"
 FANDOM_SUBDOMAIN = "witcher"
