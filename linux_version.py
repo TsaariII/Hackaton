@@ -13,6 +13,8 @@ from gpt4all import GPT4All
 from pynput import keyboard
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
+import sqlite3
+
 
 # ──────────────────────────────────────────────────────────────
 # 🔧 Configuration
@@ -94,6 +96,14 @@ def search_fandom(query, game_subdomain=FANDOM_SUBDOMAIN):
         return [f"[ERROR] Fandom direct search failed: {e}"]
 
 # ──────────────────────────────────────────────────────────────
+# 🗿 DB search
+# ──────────────────────────────────────────────────────────────
+
+def look_at_me_uwu(query):
+    conn = sqlite3.connect('wiki_data.db')
+    return
+
+# ──────────────────────────────────────────────────────────────
 # 📸 OCR + Assistant logic triggered by keypress
 # ──────────────────────────────────────────────────────────────
 
@@ -114,6 +124,10 @@ def process_capture():
     search_query = clean_query_for_fandom(refined_query, GAME_NAME)
     print("🔍 Cleaned Query:", search_query)
 
+    """
+    search_fandom was returning a plain-text URL to the model to go and serach for stuff in the fandom wiki. 
+    We are going to feed it with the rows (URLs CONTENT in plaintext)
+    """
     fandom_results = search_fandom(search_query)
     print("\n📚 Fandom Results:")
     for i, link in enumerate(fandom_results, 1):

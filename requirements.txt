@@ -9,3 +9,4 @@ gpt4all
 pynput
 selenium
 keyboard
+sqlite3
