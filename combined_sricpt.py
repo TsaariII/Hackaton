@@ -42,14 +42,16 @@ def query_optimization(input_text):
     try:
         conn = sqlite3.connect("wiki_data.db")
         cursor = conn.cursor()
-        cursor.execute("SELECT title FROM wiki_pages")
-        all_titles = [row[0] for row in cursor.fetchall()]
-        sample_titles = "\n".join(all_titles[:20])  # Limit to avoid token overflow
+        cursor.execute("SETECT title, content FROM wiki_pages_fts WHERE wiki_pages_fts MATCH ?", (input_text,))
+        results = cursor.fetchall()
+        print(results)
+        # all_titles = [row[0] for row in cursor.fetchall()]
+        # sample_titles = "\n".join(all_titles[:20])  # Limit to avoid token overflow
 
         with model.chat_session():
             prompt = (
                 f"You are an in-game AI assistant. Here is a list of wiki page titles:\n\n"
-                f"{sample_titles}\n\n"
+                f"{results}\n\n"
                 f"Player input: {input_text}\n\n"
                 "If any title closely matches the player input, return it. Otherwise, return a topic to search from content."
             )
