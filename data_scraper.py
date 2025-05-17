@@ -3,8 +3,8 @@ from bs4 import BeautifulSoup
 import sqlite3
 
 # URL to scrape
-url = "https://mightandmagic.fandom.com/wiki/Barbarian_(H3)"
-
+# url = "https://mightandmagic.fandom.com/wiki/Barbarian_(H3)"
+url = input()
 # Connect to SQLite database
 conn = sqlite3.connect('wiki_data.db')
 cursor = conn.cursor()
