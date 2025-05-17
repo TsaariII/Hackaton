@@ -1,0 +1,10 @@
+mss
+opencv-python
+numpy
+requests
+pyautogui
+pytesseract
+beautifulsoup4
+gpt4all
+pynput
+selenium
