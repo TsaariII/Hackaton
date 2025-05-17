@@ -100,27 +100,112 @@ def search_fandom(query, game_subdomain=FANDOM_SUBDOMAIN):
 
 
 
-# def search_fandom_selenium(query, game_subdomain=FANDOM_SUBDOMAIN):
-#     try:
-#         options = Options()
-#         options.add_argument("--headless")
-#         options.add_argument("--disable-gpu")
-#         driver = webdriver.Chrome(options=options)
+def search_db(query, db_path='wiki_data.db'):
+    """
+    Search the SQLite database for entries matching the query.
+    Returns a list of URLs similar to the search_fandom function.
+    """
+    try:
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        
+        cursor.execute("""
+            SELECT url FROM wiki_pages 
+            WHERE LOWER(title) = ? 
+            LIMIT 1
+        """, (query.lower(),))
+        
+        exact_match = cursor.fetchone()
+        if exact_match:
+            return [exact_match[0]]
+        
+        like_pattern = f"%{query.lower()}%"
+        cursor.execute("""
+            SELECT url FROM wiki_pages 
+            WHERE LOWER(title) LIKE ? OR LOWER(content) LIKE ?
+            ORDER BY 
+                CASE 
+                    WHEN LOWER(title) LIKE ? THEN 1
+                    ELSE 2
+                END,
+                LENGTH(title)
+            LIMIT 2
+        """, (like_pattern, like_pattern, like_pattern))
+        
+        results = [row[0] for row in cursor.fetchall()]
+        conn.close()
+        
+        return results if results else ["[No search results found in database]"]
+    
+    except Exception as e:
+        return [f"[ERROR] Database search failed: {e}"]
 
-#         search_url = f"https://{game_subdomain}.fandom.com/wiki/Special:Search?query={query.replace(' ', '+')}&limit=5"
-#         driver.get(search_url)
+def get_page_content(url, db_path='wiki_data.db'):
+    """
+    Retrieve the full content for a page by its URL.
+    Similar to fetching a page after finding it in search results.
+    """
+    try:
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        
+        cursor.execute("""
+            SELECT title, content FROM wiki_pages 
+            WHERE url = ?
+        """, (url,))
+        
+        result = cursor.fetchone()
+        conn.close()
+        
+        if result:
+            title, content = result
+            return {
+                "url": url,
+                "title": title,
+                "content": content
+            }
+        else:
+            return {
+                "url": url,
+                "title": "Page not found",
+                "content": "The requested page could not be found in the database."
+            }
+    
+    except Exception as e:
+        return {
+            "url": url,
+            "title": "Error",
+            "content": f"Failed to retrieve page: {e}"
+        }
 
-#         soup = BeautifulSoup(driver.page_source, "html.parser")
-#         driver.quit()
-
-#         links = []
-#         for a in soup.select("a.mw-search-result-heading"):
-#             href = a.get("href")
-#             if href and href.startswith("/wiki/"):
-#                 links.append(f"https://{game_subdomain}.fandom.com{href}")
-#         return links[:2] if links else ["[No search results found on Fandom]"]
-#     except Exception as e:
-#         return [f"[ERROR] Selenium Fandom search failed: {e}"] 
+def look_at_me_uwu(query):
+    """
+    Search the database and return content for use with model.
+    This replaces the original function with the same behavior pattern.
+    """
+    matching_urls = search_db(query)
+    
+    if matching_urls and not matching_urls[0].startswith('['):
+        results = []
+        for url in matching_urls:
+            page_data = get_page_content(url)
+            results.append(page_data)
+        
+        formatted_content = []
+        for page in results:
+            formatted_content.append(f"PAGE: {page['title']}\n\n{page['content']}")
+        
+        return {
+            "urls": matching_urls,
+            "pages": results,
+            "formatted_content": "\n\n---\n\n".join(formatted_content)
+        }
+    else:
+        return {
+            "urls": matching_urls,
+            "pages": [],
+            "formatted_content": matching_urls[0]
+        }
 
 # ──────────────────────────────────────────────────────────────
 # 📸 OCR + Assistant logic triggered by keypress
@@ -143,7 +228,7 @@ def process_capture():
     search_query = clean_query_for_fandom(refined_query, GAME_NAME)
     print("🔍 Cleaned Query:", search_query)
 
-    fandom_results = search_fandom(search_query)
+    fandom_results = look_at_me_uwu(search_query)
     print("\n📚 Fandom Results:")
     for i, link in enumerate(fandom_results, 1):
         print(f"{i}. {link}")
