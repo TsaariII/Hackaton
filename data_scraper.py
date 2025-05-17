@@ -18,9 +18,9 @@ CREATE TABLE IF NOT EXISTS wiki_pages (
     content TEXT
 )
 ''')
-cursor.execute('''
-CREATE VIRTUAL TABLE IF NOT EXISTS wiki_pages_fts USING fts5(title, content)
-               ''')
+# cursor.execute('''
+# CREATE VIRTUAL TABLE IF NOT EXISTS wiki_pages_fts USING fts5(title, content)
+#                ''')
 
 # Scrape the page
 response = requests.get(url)
@@ -42,7 +42,7 @@ if content_div:
 cursor.execute("INSERT OR REPLACE INTO wiki_pages (url, title, content) VALUES (?, ?, ?)",
               (url, title, content))
 
-cursor.execute("INSERT INTO wiki_pages_fts (title, content) VALUES (?, ?)", (title, content))
+# cursor.execute("INSERT INTO wiki_pages_fts (title, content) VALUES (?, ?)", (title, content))
 
 # Commit and close
 conn.commit()
