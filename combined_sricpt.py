@@ -13,6 +13,7 @@ from gpt4all import GPT4All
 from pynput import keyboard
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
+import sqlite3
 
 # ──────────────────────────────────────────────────────────────
 # 🔧 Configuration
@@ -24,6 +25,11 @@ from selenium.webdriver.chrome.options import Options
 # ⚙️ Load GPT4All model once
 # ──────────────────────────────────────────────────────────────
 
+MODEL_PATH = os.path.expanduser("/Applications/gpt4all/models/Meta-Llama-3.1-8B-Instruct-128k-Q4_0.gguf")
+TESSERACT_PATH = "/opt/homebrew/bin/tesseract"
+GAME_NAME = "Heroes of Might and Magic 3"
+# FANDOM_SUBDOMAIN = "witcher"
+
 model = GPT4All(MODEL_PATH)
 
 # ──────────────────────────────────────────────────────────────
@@ -31,24 +37,85 @@ model = GPT4All(MODEL_PATH)
 # ──────────────────────────────────────────────────────────────
 
 def query_optimization(input_text):
+    print(f"Input text: {input_text}")
+    matches = []
     try:
+        conn = sqlite3.connect("wiki_data.db")
+        cursor = conn.cursor()
+        cursor.execute("SELECT title FROM wiki_pages")
+        all_titles = [row[0] for row in cursor.fetchall()]
+        sample_titles = "\n".join(all_titles[:20])  # Limit to avoid token overflow
+
         with model.chat_session():
             prompt = (
-                "You are an in-game AI assistant. "
-                "Turn vague gamer questions into short, fandom-compatible search queries using boss names, item names, or concise objectives. "
-                "Do not explain. Output only the search query.\n\n"
-                f"Player input: {input_text}"
+                f"You are an in-game AI assistant. Here is a list of wiki page titles:\n\n"
+                f"{sample_titles}\n\n"
+                f"Player input: {input_text}\n\n"
+                "If any title closely matches the player input, return it. Otherwise, return a topic to search from content."
             )
-            response = model.generate(prompt, max_tokens=100)
-            return response.strip()
+            topic = model.generate(prompt, max_tokens=100).strip()
+            print(f"🔍 Topic or Title: {topic}")
+
+        # Try matching by title
+        cursor.execute("SELECT title, content FROM wiki_pages WHERE title LIKE ?", (f"%{topic}%",))
+        matches = cursor.fetchall()
+
+        if not matches:
+            cursor.execute("SELECT title, content FROM wiki_pages WHERE content LIKE ?", (f"%{input_text}%",))
+            matches = cursor.fetchall()
+
+        conn.close()
+
+        if not matches:
+            return f"[INFO] No pages found for: {topic}"
+
+        combined = "\n\n".join([f"{title}\n{content[:1000]}" for title, content in matches[:3]])
+
+        with model.chat_session():
+            summary_prompt = (
+                "You are a game lore assistant. Summarize the following wiki content for an in-game player:\n\n"
+                f"{combined}\n\nSummary:"
+            )
+            summary = model.generate(summary_prompt, max_tokens=300)
+            return summary.strip()
+
     except Exception as e:
-        return f"[ERROR] GPT4All failed: {e}"
+        return f"[ERROR] GPT4All or DB failed: {e}"
+
+
+# def query_optimization(input_text):
+#     print(f"Input text: {input_text}")
+#     try:
+#         with model.chat_session():
+#             prompt = (
+#                 "You are an in-game AI assistant. "
+#                 "Turn vague gamer questions into short, fandom-compatible search queries using boss names, item names, or concise objectives. "
+#                 "Do not explain. Output only the search query.\n\n"
+#                 f"Player input: {input_text}"
+#             )
+#             response = model.generate(prompt, max_tokens=100)
+#             print(f"Response: {response}")
+#         return response.strip()
+#     except Exception as e:
+#         return f"[ERROR] GPT4All failed: {e}"
+    # try:
+    #     with model.chat_session():
+    #         prompt = (
+    #             "You are an in-game AI assistant. "
+    #             "Turn vague gamer questions into short, fandom-compatible search queries using boss names, item names, or concise objectives. "
+    #             "Do not explain. Output only the search query.\n\n"
+    #             f"Player input: {input_text}"
+    #         )
+    #         response = model.generate(prompt, max_tokens=100)
+    #         print(f"Response: {response}")
+    #         return response.strip()
 
 # ──────────────────────────────────────────────────────────────
 # 🧹 Clean search query for wiki compatibility
 # ──────────────────────────────────────────────────────────────
 
 def clean_query_for_fandom(raw_query, game_name):
+    # print(f"Raw query: {raw_query}")
     raw = raw_query.lower()
     phrases_to_remove = [
         "how to beat", "how do i beat", "boss fight", "walkthrough",
@@ -68,43 +135,65 @@ def clean_query_for_fandom(raw_query, game_name):
 # 🌐 Fandom Wiki Search
 # ──────────────────────────────────────────────────────────────
 
-MODEL_PATH = os.path.expanduser("/home/fdessoy/.local/share/nomic.ai/GPT4All/Meta-Llama-3-8B-Instruct.Q4_0.gguf")
-TESSERACT_PATH = "/opt/homebrew/bin/tesseract"
-GAME_NAME = "Witcher 3"
-FANDOM_SUBDOMAIN = "witcher"
+# def search_fandom(query, game_subdomain=FANDOM_SUBDOMAIN):
+#     """Search directly on a specific game's Fandom wiki via its internal search page."""
+#     try:
+#         search_url = f"https://{game_subdomain}.fandom.com/wiki/Special:Search?query={query.replace(' ', '+')}&limit=5"
+#         print(f"🔍 Searching: {search_url}")
+#         headers = {'User-Agent': 'Mozilla/5.0'}
+#         response = requests.get(search_url, headers=headers, allow_redirects=True)
+#         soup = BeautifulSoup(response.text, 'html.parser')
 
-def search_fandom(query, game_subdomain=FANDOM_SUBDOMAIN):
-    """Search directly on a specific game's Fandom wiki via its internal search page."""
-    try:
-        search_url = f"https://{game_subdomain}.fandom.com/wiki/Special:Search?query={query.replace(' ', '+')}&limit=5"
-        print(f"🔍 Searching: {search_url}")
-        headers = {'User-Agent': 'Mozilla/5.0'}
-        response = requests.get(search_url, headers=headers, allow_redirects=True)
-        soup = BeautifulSoup(response.text, 'html.parser')
+#         # ✅ Detect redirect directly to article
+#         if response.url.startswith(f"https://{game_subdomain}.fandom.com/wiki/") and "Special:Search" not in response.url:
+#             return [response.url]
 
-        # ✅ Detect redirect directly to article
-        if response.url.startswith(f"https://{game_subdomain}.fandom.com/wiki/") and "Special:Search" not in response.url:
-            return [response.url]
+#         # ✅ Fallback: parse search result list
+#         links = []
+#         for a in soup.select('a.mw-search-result-heading'):
+#             href = a.get('href')
+#             if href and href.startswith("/wiki/"):
+#                 full_url = f"https://{game_subdomain}.fandom.com{href}"
+#                 links.append(full_url)
 
-        # ✅ Fallback: parse search result list
-        links = []
-        for a in soup.select('a.mw-search-result-heading'):
-            href = a.get('href')
-            if href and href.startswith("/wiki/"):
-                full_url = f"https://{game_subdomain}.fandom.com{href}"
-                links.append(full_url)
-
-        return links[:2] if links else ["[No search results found on Fandom]"]
-    except Exception as e:
-        return [f"[ERROR] Fandom direct search failed: {e}"]
+#         return links[:2] if links else ["[No search results found on Fandom]"]
+#     except Exception as e:
+#         return [f"[ERROR] Fandom direct search failed: {e}"]
 
 
+
+# def search_fandom(query, game_subdomain=FANDOM_SUBDOMAIN):
+#     try:
+#         search_url = f"https://{game_subdomain}.fandom.com/wiki/Special:Search?query={query.replace(' ', '+')}&limit=5"
+#         print(f"🔍 Searching: {search_url}")
+#         headers = {'User-Agent': 'Mozilla/5.0'}
+#         response = requests.get(search_url, headers=headers, allow_redirects=True)
+#         soup = BeautifulSoup(response.text, 'html.parser')
+
+#         if response.url.startswith(f"https://{game_subdomain}.fandom.com/wiki/") and "Special:Search" not in response.url:
+#             return [response.url]
+
+#         links = []
+#         for a in soup.select('a.mw-search-result-heading'):
+#             href = a.get('href')
+#             if href and href.startswith("/wiki/"):
+#                 full_url = f"https://{game_subdomain}.fandom.com{href}"
+#                 links.append(full_url)
+
+#         return links[:2] if links else ["[No search results found on Fandom]"]
+#     except Exception as e:
+#         return [f"[ERROR] Fandom direct search failed: {e}"]
+
+# ──────────────────────────────────────────────────────────────
+# 🗿 DB search
+# ──────────────────────────────────────────────────────────────
 
 def search_db(query, db_path='wiki_data.db'):
     """
     Search the SQLite database for entries matching the query.
     Returns a list of URLs similar to the search_fandom function.
     """
+    # print(f"Query: {query}")
     try:
         conn = sqlite3.connect(db_path)
         cursor = conn.cursor()
@@ -145,6 +234,7 @@ def get_page_content(url, db_path='wiki_data.db'):
     Retrieve the full content for a page by its URL.
     Similar to fetching a page after finding it in search results.
     """
+    # print(f"URL: {url}")
     try:
         conn = sqlite3.connect(db_path)
         cursor = conn.cursor()
@@ -207,6 +297,7 @@ def look_at_me_uwu(query):
             "formatted_content": matching_urls[0]
         }
 
+
 # ──────────────────────────────────────────────────────────────
 # 📸 OCR + Assistant logic triggered by keypress
 # ──────────────────────────────────────────────────────────────
@@ -228,10 +319,10 @@ def process_capture():
     search_query = clean_query_for_fandom(refined_query, GAME_NAME)
     print("🔍 Cleaned Query:", search_query)
 
-    fandom_results = look_at_me_uwu(search_query)
-    print("\n📚 Fandom Results:")
-    for i, link in enumerate(fandom_results, 1):
-        print(f"{i}. {link}")
+    # fandom_results = look_at_me_uwu(search_query)
+    # print("\n📚 Fandom Results:")
+    # for i, link in enumerate(fandom_results, 1):
+    #     print(f"{i}. {link}")
 
 # ──────────────────────────────────────────────────────────────
 # ⌨️ Keyboard Listener
