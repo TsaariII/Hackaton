@@ -18,10 +18,7 @@ from selenium.webdriver.chrome.options import Options
 # 🔧 Configuration
 # ──────────────────────────────────────────────────────────────
 
-MODEL_PATH = os.path.expanduser("/home/fdessoy/.local/share/nomic.ai/GPT4All/Meta-Llama-3-8B-Instruct.Q4_0.gguf")
-TESSERACT_PATH = "/opt/homebrew/bin/tesseract"
-GAME_NAME = "Witcher 3"
-FANDOM_SUBDOMAIN = "witcher"
+
 
 # ──────────────────────────────────────────────────────────────
 # ⚙️ Load GPT4All model once
@@ -71,52 +68,59 @@ def clean_query_for_fandom(raw_query, game_name):
 # 🌐 Fandom Wiki Search
 # ──────────────────────────────────────────────────────────────
 
-# def search_fandom(query, game_subdomain=FANDOM_SUBDOMAIN):
-#     """Search directly on a specific game's Fandom wiki via its internal search page."""
-#     try:
-#         search_url = f"https://{game_subdomain}.fandom.com/wiki/Special:Search?query={query.replace(' ', '+')}&limit=5"
-#         print(f"🔍 Searching: {search_url}")
-#         headers = {'User-Agent': 'Mozilla/5.0'}
-#         response = requests.get(search_url, headers=headers, allow_redirects=True)
-#         soup = BeautifulSoup(response.text, 'html.parser')
+MODEL_PATH = os.path.expanduser("/home/fdessoy/.local/share/nomic.ai/GPT4All/Meta-Llama-3-8B-Instruct.Q4_0.gguf")
+TESSERACT_PATH = "/opt/homebrew/bin/tesseract"
+GAME_NAME = "Witcher 3"
+FANDOM_SUBDOMAIN = "witcher"
 
-#         # ✅ Detect redirect directly to article
-#         if response.url.startswith(f"https://{game_subdomain}.fandom.com/wiki/") and "Special:Search" not in response.url:
-#             return [response.url]
-
-#         # ✅ Fallback: parse search result list
-#         links = []
-#         for a in soup.select('a.mw-search-result-heading'):
-#             href = a.get('href')
-#             if href and href.startswith("/wiki/"):
-#                 full_url = f"https://{game_subdomain}.fandom.com{href}"
-#                 links.append(full_url)
-
-#         return links[:2] if links else ["[No search results found on Fandom]"]
-#     except Exception as e:
-#         return [f"[ERROR] Fandom direct search failed: {e}"]
-
-def search_fandom_selenium(query, game_subdomain=FANDOM_SUBDOMAIN):
+def search_fandom(query, game_subdomain=FANDOM_SUBDOMAIN):
+    """Search directly on a specific game's Fandom wiki via its internal search page."""
     try:
-        options = Options()
-        options.add_argument("--headless")
-        options.add_argument("--disable-gpu")
-        driver = webdriver.Chrome(options=options)
-
         search_url = f"https://{game_subdomain}.fandom.com/wiki/Special:Search?query={query.replace(' ', '+')}&limit=5"
-        driver.get(search_url)
+        print(f"🔍 Searching: {search_url}")
+        headers = {'User-Agent': 'Mozilla/5.0'}
+        response = requests.get(search_url, headers=headers, allow_redirects=True)
+        soup = BeautifulSoup(response.text, 'html.parser')
 
-        soup = BeautifulSoup(driver.page_source, "html.parser")
-        driver.quit()
+        # ✅ Detect redirect directly to article
+        if response.url.startswith(f"https://{game_subdomain}.fandom.com/wiki/") and "Special:Search" not in response.url:
+            return [response.url]
 
+        # ✅ Fallback: parse search result list
         links = []
-        for a in soup.select("a.mw-search-result-heading"):
-            href = a.get("href")
+        for a in soup.select('a.mw-search-result-heading'):
+            href = a.get('href')
             if href and href.startswith("/wiki/"):
-                links.append(f"https://{game_subdomain}.fandom.com{href}")
+                full_url = f"https://{game_subdomain}.fandom.com{href}"
+                links.append(full_url)
+
         return links[:2] if links else ["[No search results found on Fandom]"]
     except Exception as e:
-        return [f"[ERROR] Selenium Fandom search failed: {e}"] 
+        return [f"[ERROR] Fandom direct search failed: {e}"]
+
+
+
+# def search_fandom_selenium(query, game_subdomain=FANDOM_SUBDOMAIN):
+#     try:
+#         options = Options()
+#         options.add_argument("--headless")
+#         options.add_argument("--disable-gpu")
+#         driver = webdriver.Chrome(options=options)
+
+#         search_url = f"https://{game_subdomain}.fandom.com/wiki/Special:Search?query={query.replace(' ', '+')}&limit=5"
+#         driver.get(search_url)
+
+#         soup = BeautifulSoup(driver.page_source, "html.parser")
+#         driver.quit()
+
+#         links = []
+#         for a in soup.select("a.mw-search-result-heading"):
+#             href = a.get("href")
+#             if href and href.startswith("/wiki/"):
+#                 links.append(f"https://{game_subdomain}.fandom.com{href}")
+#         return links[:2] if links else ["[No search results found on Fandom]"]
+#     except Exception as e:
+#         return [f"[ERROR] Selenium Fandom search failed: {e}"] 
 
 # ──────────────────────────────────────────────────────────────
 # 📸 OCR + Assistant logic triggered by keypress
