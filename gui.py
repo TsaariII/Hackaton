@@ -1,5 +1,7 @@
 from ttkbootstrap import Style
 import ttkbootstrap as ttk
+from gtts import gTTS
+import pygame
 
 root = ttk.Window(themename='cyborg')           # Configure the themename when creating the window
 root.geometry("600x800")                        # Sets the initial size of the window
@@ -40,6 +42,13 @@ def update_item_name(new_text):
     item_label.config(text = new_text)
 
 def update_window_prompt_text(new_text):
+    # Text to speech ==================
+    myobj = gTTS(text=new_text, lang='en', slow=False)
+    myobj.save("tts.mp3")
+    pygame.mixer.init()
+    pygame.mixer.music.load("tts.mp3")
+    pygame.mixer.music.play()
+    # --------------------------------
     padding = 0
     while padding < 42:
         new_text = new_text + "\n"
@@ -51,6 +60,7 @@ def update_window_prompt_text(new_text):
 # Close window function
 def close_win(e):
    root.destroy()
+   exit()
 
 # Bind the ESC key with the callback function
 root.bind('<Escape>', lambda e: close_win(e))
@@ -59,7 +69,7 @@ root.bind('<k>', lambda e: close_win(e))
 
 #NOTE This function will be ran once after the window is open
 def do_after_window_opens():
-    update_window_prompt_text("Propmt text Eggjdkjwdkwjdjawlkdj adlajwldjawjhaldjawldjaldjawldhjawliuhjawluhdaludhwa egg egg wow! eggs\nSomany aggga")
+    update_window_prompt_text("This is a test prompt for the item idk\n It works?")
     update_item_name("Name of item")
     update_status()
 
