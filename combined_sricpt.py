@@ -37,52 +37,195 @@ model = GPT4All(MODEL_PATH)
 # ──────────────────────────────────────────────────────────────
 
 def query_optimization(input_text):
+    """Find matching titles even with extra characters in the input."""
     print(f"Input text: {input_text}")
-    matches = []
     try:
         conn = sqlite3.connect("wiki_data.db")
         cursor = conn.cursor()
-        cursor.execute("SETECT title, content FROM wiki_pages_fts WHERE wiki_pages_fts MATCH ?", (input_text,))
-        results = cursor.fetchall()
-        print(results)
-        # all_titles = [row[0] for row in cursor.fetchall()]
-        # sample_titles = "\n".join(all_titles[:20])  # Limit to avoid token overflow
-
-        with model.chat_session():
-            prompt = (
-                f"You are an in-game AI assistant. Here is a list of wiki page titles:\n\n"
-                f"{results}\n\n"
-                f"Player input: {input_text}\n\n"
-                "If any title closely matches the player input, return it. Otherwise, return a topic to search from content."
-            )
-            topic = model.generate(prompt, max_tokens=100).strip()
-            print(f"🔍 Topic or Title: {topic}")
-
-        # Try matching by title
-        cursor.execute("SELECT title, content FROM wiki_pages WHERE title LIKE ?", (f"%{topic}%",))
-        matches = cursor.fetchall()
-
-        if not matches:
-            cursor.execute("SELECT title, content FROM wiki_pages WHERE content LIKE ?", (f"%{input_text}%",))
+        
+        # Split input text into words for better matching
+        search_words = input_text.lower().split()
+        
+        # Step 1: Try to find titles that contain all the main words from input
+        if search_words:
+            # Start with the first word
+            title_query = f"SELECT title FROM wiki_pages WHERE LOWER(title) LIKE ?"
+            params = [f"%{search_words[0]}%"]
+            
+            # Add conditions for additional words
+            for i in range(1, min(3, len(search_words))):  # Use up to first 3 words
+                if len(search_words[i]) > 2:  # Skip very short words
+                    title_query += f" AND LOWER(title) LIKE ?"
+                    params.append(f"%{search_words[i]}%")
+            
+            cursor.execute(title_query, params)
             matches = cursor.fetchall()
-
+            
+            if matches:
+                titles = [match[0] for match in matches]
+                
+                # If multiple matches, use GPT to find best match
+                if len(titles) > 1:
+                    titles_text = "\n".join(titles)
+                    with model.chat_session():
+                        title_prompt = (
+                            f"You are helping find the most relevant wiki page. "
+                            f"Which of these titles best matches the player's question?\n\n"
+                            f"Player question: {input_text}\n\n"
+                            f"Available titles:\n{titles_text}\n\n"
+                            f"Return only the most relevant title name:"
+                        )
+                        best_title = model.generate(title_prompt, max_tokens=50).strip()
+                else:
+                    best_title = titles[0]
+                
+                # Get content for the selected title
+                cursor.execute("SELECT content FROM wiki_pages WHERE title = ?", (best_title,))
+                result = cursor.fetchone()
+                if result:
+                    content = result[0]
+                    # Truncate content to fit within token limit
+                    content = content[:1500] if len(content) > 1500 else content
+                    
+                    with model.chat_session():
+                        answer_prompt = (
+                            f"You are an in-game AI assistant. Answer this question based on the following wiki content:\n\n"
+                            f"TITLE: {best_title}\n\n"
+                            f"CONTENT: {content}\n\n"
+                            f"Player question: {input_text}\n\n"
+                            f"Provide a concise answer:"
+                        )
+                        response = model.generate(answer_prompt, max_tokens=300)
+                        conn.close()
+                        return response.strip()
+        
+        # Step 2: Try more aggressive search if no matches yet
+        # This handles cases where all words don't match but some might
+        cursor.execute("SELECT title FROM wiki_pages ORDER BY title")
+        all_titles = cursor.fetchall()
+        
+        # Check each title for partial matches with any of the input words
+        potential_matches = []
+        for title_row in all_titles:
+            title = title_row[0].lower()
+            match_score = 0
+            
+            for word in search_words:
+                if len(word) > 2 and word in title:  # Only count significant words
+                    match_score += 1
+            
+            if match_score > 0:
+                potential_matches.append((title_row[0], match_score))
+        
+        # Sort by match score (highest first)
+        potential_matches.sort(key=lambda x: x[1], reverse=True)
+        
+        if potential_matches:
+            best_title = potential_matches[0][0]
+            
+            # Get content for the best matching title
+            cursor.execute("SELECT content FROM wiki_pages WHERE title = ?", (best_title,))
+            result = cursor.fetchone()
+            
+            if result:
+                content = result[0]
+                content = content[:1500] if len(content) > 1500 else content
+                
+                with model.chat_session():
+                    answer_prompt = (
+                        f"You are an in-game AI assistant. Answer this question based on the following wiki content:\n\n"
+                        f"TITLE: {best_title}\n\n"
+                        f"CONTENT: {content}\n\n"
+                        f"Player question: {input_text}\n\n"
+                        f"Provide a concise answer:"
+                    )
+                    response = model.generate(answer_prompt, max_tokens=300)
+                    conn.close()
+                    return response.strip()
+        
+        # Step 3: Fallback to content search
+        query_parts = []
+        params = []
+        
+        for word in search_words:
+            if len(word) > 2:  # Only use words with more than 2 characters
+                query_parts.append("LOWER(content) LIKE ?")
+                params.append(f"%{word}%")
+        
+        if query_parts:
+            content_query = f"SELECT title, content FROM wiki_pages WHERE {' OR '.join(query_parts)} LIMIT 1"
+            cursor.execute(content_query, params)
+            content_match = cursor.fetchone()
+            
+            if content_match:
+                title, content = content_match
+                content = content[:1500] if len(content) > 1500 else content
+                
+                with model.chat_session():
+                    prompt = (
+                        f"You are an in-game AI assistant. Answer this question based on the following wiki content:\n\n"
+                        f"TITLE: {title}\n\n"
+                        f"CONTENT: {content}\n\n"
+                        f"Player question: {input_text}\n\n"
+                        f"Provide a concise answer:"
+                    )
+                    response = model.generate(prompt, max_tokens=300)
+                    conn.close()
+                    return response.strip()
+        
         conn.close()
-
-        if not matches:
-            return f"[INFO] No pages found for: {topic}"
-
-        combined = "\n\n".join([f"{title}\n{content[:1000]}" for title, content in matches[:3]])
-
-        with model.chat_session():
-            summary_prompt = (
-                "You are a game lore assistant. Summarize the following wiki content for an in-game player:\n\n"
-                f"{combined}\n\nSummary:"
-            )
-            summary = model.generate(summary_prompt, max_tokens=300)
-            return summary.strip()
+        return f"[INFO] No relevant information found for: {input_text}"
 
     except Exception as e:
-        return f"[ERROR] GPT4All or DB failed: {e}"
+        return f"[ERROR] Database or AI query failed: {e}"
+
+# def query_optimization(input_text):
+#     print(f"Input text: {input_text}")
+#     matches = []
+#     try:
+#         conn = sqlite3.connect("wiki_data.db")
+#         cursor = conn.cursor()
+#         cursor.execute("SELECT title, content FROM wiki_pages_fts WHERE wiki_pages_fts MATCH ?", (input_text,))
+#         results = cursor.fetchall()
+#         print(results)
+#         # all_titles = [row[0] for row in cursor.fetchall()]
+#         # sample_titles = "\n".join(all_titles[:20])  # Limit to avoid token overflow
+
+#         with model.chat_session():
+#             prompt = (
+#                 f"You are an in-game AI assistant. Here is a list of wiki page titles:\n\n"
+#                 f"{results}\n\n"
+#                 f"Player input: {input_text}\n\n"
+#                 "If any title closely matches the player input, return it. Otherwise, return a topic to search from content."
+#             )
+#             topic = model.generate(prompt, max_tokens=100).strip()
+#             print(f"🔍 Topic or Title: {topic}")
+
+#         # Try matching by title
+#         cursor.execute("SELECT title, content FROM wiki_pages WHERE title LIKE ?", (f"%{topic}%",))
+#         matches = cursor.fetchall()
+
+#         if not matches:
+#             cursor.execute("SELECT title, content FROM wiki_pages WHERE content LIKE ?", (f"%{input_text}%",))
+#             matches = cursor.fetchall()
+
+#         conn.close()
+
+#         if not matches:
+#             return f"[INFO] No pages found for: {topic}"
+
+#         combined = "\n\n".join([f"{title}\n{content[:1000]}" for title, content in matches[:3]])
+
+#         with model.chat_session():
+#             summary_prompt = (
+#                 "You are a game lore assistant. Summarize the following wiki content for an in-game player:\n\n"
+#                 f"{combined}\n\nSummary:"
+#             )
+#             summary = model.generate(summary_prompt, max_tokens=300)
+#             return summary.strip()
+
+#     except Exception as e:
+#         return f"[ERROR] GPT4All or DB failed: {e}"
 
 
 # def query_optimization(input_text):
