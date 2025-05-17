@@ -11,5 +11,5 @@ selenium
 keyboard
 sqlite3
 pygame
-tkkbootstrap
-gTTS
+ttkbootstrap
+gtts

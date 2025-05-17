@@ -9,3 +9,6 @@ gpt4all
 pynput
 selenium
 keyboard
+pygame
+ttkbootstrap
+gtts

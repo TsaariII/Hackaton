@@ -126,15 +126,15 @@ def unsharp_mask(image, kernel_size=(5, 5), sigma=1.0, strength=1.5):
         #keyboard.wait("k", suppress=True)
 
         # Hae hiiren sijainti
-x, y = pyautogui.position()
+# x, y = pyautogui.position()
 
     # Määritä alue hiiren ympärillä (esim. 120x40 pikseliä)
-region = {
-    "top": y - 20,
-    "left": x - 40,
-    "width": 180,
-    "height": 40
-}
+# region = {
+#     "top": y - 20,
+#     "left": x - 40,
+#     "width": 180,
+#     "height": 40
+# }
 
     #with mss.mss() as sct:
     #img = np.array(sct.grab(region))

@@ -14,16 +14,88 @@ from pynput import keyboard
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 import sqlite3
+from ttkbootstrap import Style
+import ttkbootstrap as ttk
+from gtts import gTTS
+import pygame
 
-# ──────────────────────────────────────────────────────────────
-# 🔧 Configuration
-# ──────────────────────────────────────────────────────────────
+
+root = ttk.Window(themename='cyborg')           # Configure the themename when creating the window
+root.geometry("600x800")                        # Sets the initial size of the window
+
+title_label = ttk.Label(root, text="  Universal    -   \n   -    Smartass  ")
+title_label.config(font=("Hobo Std", 40, "bold"))
+title_label.pack(pady=30)
+
+parent = ttk.Frame(root)
+parent.pack(pady=5, padx=10, fill="x")
+
+# PROGRESS STATE TITLE
+status_label = ttk.Label(parent, text=" Finding... ", bootstyle="inverse-info")
+status_label.config(font=("Helvetica", 30, "bold"))
+status_label.pack(pady=1, padx=10)
+
+# EMPTY SPACE (filler)
+empty_label = ttk.Label(parent, text="\n")
+empty_label.config(font=("Helvetica", 10, "bold"))
+empty_label.pack(pady=1, padx=10)
+
+# ITEM NAME TITLE
+item_label = ttk.Label(parent, text="", bootstyle="inverse-primary", wraplength=550)
+item_label.config(font=("Helvetica", 30, "bold"))
+item_label.pack(pady=5, padx=10, fill="x")
+
+# PROMPT TEXT OUTPUT
+prompt_label = ttk.Label(parent, text="", bootstyle="primary", wraplength=550)
+prompt_label.config(font=("Helvetica", 20))
+prompt_label.pack(pady=5, padx=10, fill="x")
 
 
+def update_status():
+    status_label.config(text = " Got reply! ")
 
-# ──────────────────────────────────────────────────────────────
-# ⚙️ Load GPT4All model once
-# ──────────────────────────────────────────────────────────────
+def update_item_name(new_text):
+    new_text = " " + new_text + " "
+    item_label.config(text = new_text)
+
+def update_window_prompt_text(new_text):
+    # Text to speech ==================
+    myobj = gTTS(text=new_text, lang='en', slow=False)
+    myobj.save("tts.mp3")
+    pygame.mixer.init()
+    pygame.mixer.music.load("tts.mp3")
+    pygame.mixer.music.play()
+    # --------------------------------
+    padding = 0
+    while padding < 42:
+        new_text = new_text + "\n"
+        padding += 1
+    prompt_label.config(text = new_text)
+
+#ttk.Entry(parent).pack(side="left", fill="x", expand=True, padx=5) # Create & pack entry widget
+
+# Close window function
+def close_win(e):
+   root.destroy()
+   exit()
+
+# Bind the ESC key with the callback function
+root.bind('<Escape>', lambda e: close_win(e))
+root.bind('<k>', lambda e: close_win(e))
+
+
+#NOTE This function will be ran once after the window is open
+# def do_after_window_opens():
+#     update_window_prompt_text("This is a test prompt for the item idk\n It works?")
+#     update_item_name("Name of item")
+#     update_status()
+
+# root.after(1, do_after_window_opens)
+# root.mainloop()
+
+#df is your dataframe
+#example function is applicable for all INT dataframe 
+df_squared = df.apply(yourFunction)
 
 MODEL_PATH = os.path.expanduser("/Applications/gpt4all/models/Meta-Llama-3.1-8B-Instruct-128k-Q4_0.gguf")
 TESSERACT_PATH = "/opt/homebrew/bin/tesseract"
@@ -179,81 +251,6 @@ def query_optimization(input_text):
     except Exception as e:
         return f"[ERROR] Database or AI query failed: {e}"
 
-# def query_optimization(input_text):
-#     print(f"Input text: {input_text}")
-#     matches = []
-#     try:
-#         conn = sqlite3.connect("wiki_data.db")
-#         cursor = conn.cursor()
-#         cursor.execute("SELECT title, content FROM wiki_pages_fts WHERE wiki_pages_fts MATCH ?", (input_text,))
-#         results = cursor.fetchall()
-#         print(results)
-#         # all_titles = [row[0] for row in cursor.fetchall()]
-#         # sample_titles = "\n".join(all_titles[:20])  # Limit to avoid token overflow
-
-#         with model.chat_session():
-#             prompt = (
-#                 f"You are an in-game AI assistant. Here is a list of wiki page titles:\n\n"
-#                 f"{results}\n\n"
-#                 f"Player input: {input_text}\n\n"
-#                 "If any title closely matches the player input, return it. Otherwise, return a topic to search from content."
-#             )
-#             topic = model.generate(prompt, max_tokens=100).strip()
-#             print(f"🔍 Topic or Title: {topic}")
-
-#         # Try matching by title
-#         cursor.execute("SELECT title, content FROM wiki_pages WHERE title LIKE ?", (f"%{topic}%",))
-#         matches = cursor.fetchall()
-
-#         if not matches:
-#             cursor.execute("SELECT title, content FROM wiki_pages WHERE content LIKE ?", (f"%{input_text}%",))
-#             matches = cursor.fetchall()
-
-#         conn.close()
-
-#         if not matches:
-#             return f"[INFO] No pages found for: {topic}"
-
-#         combined = "\n\n".join([f"{title}\n{content[:1000]}" for title, content in matches[:3]])
-
-#         with model.chat_session():
-#             summary_prompt = (
-#                 "You are a game lore assistant. Summarize the following wiki content for an in-game player:\n\n"
-#                 f"{combined}\n\nSummary:"
-#             )
-#             summary = model.generate(summary_prompt, max_tokens=300)
-#             return summary.strip()
-
-#     except Exception as e:
-#         return f"[ERROR] GPT4All or DB failed: {e}"
-
-
-# def query_optimization(input_text):
-#     print(f"Input text: {input_text}")
-#     try:
-#         with model.chat_session():
-#             prompt = (
-#                 "You are an in-game AI assistant. "
-#                 "Turn vague gamer questions into short, fandom-compatible search queries using boss names, item names, or concise objectives. "
-#                 "Do not explain. Output only the search query.\n\n"
-#                 f"Player input: {input_text}"
-#             )
-#             response = model.generate(prompt, max_tokens=100)
-#             print(f"Response: {response}")
-#         return response.strip()
-#     except Exception as e:
-#         return f"[ERROR] GPT4All failed: {e}"
-    # try:
-    #     with model.chat_session():
-    #         prompt = (
-    #             "You are an in-game AI assistant. "
-    #             "Turn vague gamer questions into short, fandom-compatible search queries using boss names, item names, or concise objectives. "
-    #             "Do not explain. Output only the search query.\n\n"
-    #             f"Player input: {input_text}"
-    #         )
-    #         response = model.generate(prompt, max_tokens=100)
-    #         print(f"Response: {response}")
-    #         return response.strip()
 
 # ──────────────────────────────────────────────────────────────
 # 🧹 Clean search query for wiki compatibility
@@ -275,59 +272,6 @@ def clean_query_for_fandom(raw_query, game_name):
     raw = re.sub(r'[^\w\s]', '', raw)
     cleaned = ' '.join(raw.split())
     return f"{cleaned}"
-
-# ──────────────────────────────────────────────────────────────
-# 🌐 Fandom Wiki Search
-# ──────────────────────────────────────────────────────────────
-
-# def search_fandom(query, game_subdomain=FANDOM_SUBDOMAIN):
-#     """Search directly on a specific game's Fandom wiki via its internal search page."""
-#     try:
-#         search_url = f"https://{game_subdomain}.fandom.com/wiki/Special:Search?query={query.replace(' ', '+')}&limit=5"
-#         print(f"🔍 Searching: {search_url}")
-#         headers = {'User-Agent': 'Mozilla/5.0'}
-#         response = requests.get(search_url, headers=headers, allow_redirects=True)
-#         soup = BeautifulSoup(response.text, 'html.parser')
-
-#         # ✅ Detect redirect directly to article
-#         if response.url.startswith(f"https://{game_subdomain}.fandom.com/wiki/") and "Special:Search" not in response.url:
-#             return [response.url]
-
-#         # ✅ Fallback: parse search result list
-#         links = []
-#         for a in soup.select('a.mw-search-result-heading'):
-#             href = a.get('href')
-#             if href and href.startswith("/wiki/"):
-#                 full_url = f"https://{game_subdomain}.fandom.com{href}"
-#                 links.append(full_url)
-
-#         return links[:2] if links else ["[No search results found on Fandom]"]
-#     except Exception as e:
-#         return [f"[ERROR] Fandom direct search failed: {e}"]
-
-
-
-# def search_fandom(query, game_subdomain=FANDOM_SUBDOMAIN):
-#     try:
-#         search_url = f"https://{game_subdomain}.fandom.com/wiki/Special:Search?query={query.replace(' ', '+')}&limit=5"
-#         print(f"🔍 Searching: {search_url}")
-#         headers = {'User-Agent': 'Mozilla/5.0'}
-#         response = requests.get(search_url, headers=headers, allow_redirects=True)
-#         soup = BeautifulSoup(response.text, 'html.parser')
-
-#         if response.url.startswith(f"https://{game_subdomain}.fandom.com/wiki/") and "Special:Search" not in response.url:
-#             return [response.url]
-
-#         links = []
-#         for a in soup.select('a.mw-search-result-heading'):
-#             href = a.get('href')
-#             if href and href.startswith("/wiki/"):
-#                 full_url = f"https://{game_subdomain}.fandom.com{href}"
-#                 links.append(full_url)
-
-#         return links[:2] if links else ["[No search results found on Fandom]"]
-#     except Exception as e:
-#         return [f"[ERROR] Fandom direct search failed: {e}"]
 
 # ──────────────────────────────────────────────────────────────
 # 🗿 DB search
@@ -446,28 +390,33 @@ def look_at_me_uwu(query):
 # ──────────────────────────────────────────────────────────────
 # 📸 OCR + Assistant logic triggered by keypress
 # ──────────────────────────────────────────────────────────────
+def do_after_window_opens():
+    pytesseract.pytesseract.tesseract_cmd = TESSERACT_PATH
+    text = pytesseract.image_to_string("ocr_output.png", config='--psm 6').strip()
+    # print("\n🖼️ OCR Text:", text)
+    update_item_name(text)
+    update_window_prompt_text(query_optimization(text))
+    update_status()
+
+root.after(1, do_after_window_opens)
 
 def process_capture():
-    x, y = pyautogui.position()
-    region = {"top": y - 20, "left": x - 60, "width": 120, "height": 40}
+    # x, y = pyautogui.position()
+    # region = {"top": y - 20, "left": x - 60, "width": 120, "height": 40}
 
-    with mss.mss() as sct:
-        img = np.array(sct.grab(region))
+    # with mss.mss() as sct:
+    #     img = np.array(sct.grab(region))
 
-    pytesseract.pytesseract.tesseract_cmd = TESSERACT_PATH
-    text = pytesseract.image_to_string(img, config='--psm 6').strip()
-    print("\n🖼️ OCR Text:", text)
+    # pytesseract.pytesseract.tesseract_cmd = TESSERACT_PATH
+    # text = pytesseract.image_to_string("ocr_output.png", config='--psm 6').strip()
+    # print("\n🖼️ OCR Text:", text)
+    root.mainloop()
+    
+    
+    # print("🤖 Optimized Query:", refined_query)
 
-    refined_query = query_optimization(text)
-    print("🤖 Optimized Query:", refined_query)
-
-    search_query = clean_query_for_fandom(refined_query, GAME_NAME)
-    print("🔍 Cleaned Query:", search_query)
-
-    # fandom_results = look_at_me_uwu(search_query)
-    # print("\n📚 Fandom Results:")
-    # for i, link in enumerate(fandom_results, 1):
-    #     print(f"{i}. {link}")
+    # search_query = clean_query_for_fandom(refined_query, GAME_NAME)
+    # print("🔍 Cleaned Query:", search_query)
 
 # ──────────────────────────────────────────────────────────────
 # ⌨️ Keyboard Listener
@@ -477,6 +426,7 @@ def on_press(key):
     try:
         if key.char.lower() == 'k':
             threading.Thread(target=process_capture, daemon=True).start()
+            
     except AttributeError:
         if key == keyboard.Key.esc:
             print("🛑 Exiting.")
